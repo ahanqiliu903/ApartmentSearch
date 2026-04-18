@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NYC Apartment Finder</title>
+</head>
+<body>
+
+  <h1>NYC Apartment Finder</h1>
+  <p>Set your preferences and let the bot do the hunting.</p>
+
+  <form id="prefForm">
+
+    <div>
+      <label>Max Monthly Budget: <span id="budgetLabel">$4,500</span></label><br>
+      <input type="range" id="budgetMax" min="500" max="15000" step="50" value="4500" />
+    </div>
+
+    <br>
+
+    <div>
+      <label for="bedrooms">Bedrooms</label><br>
+      <select id="bedrooms">
+        <option value="1">1 bedroom</option>
+        <option value="2">2 bedrooms</option>
+        <option value="3" selected>3 bedrooms</option>
+        <option value="4">4 bedrooms</option>
+        <option value="5">5+ bedrooms</option>
+      </select>
+    </div>
+
+    <br>
+
+    <div>
+      <label for="bathrooms">Bathrooms</label><br>
+      <select id="bathrooms">
+        <option value="1">1 bathroom</option>
+        <option value="1.5">1.5 bathrooms</option>
+        <option value="2" selected>2 bathrooms</option>
+        <option value="2.5">2.5 bathrooms</option>
+        <option value="3">3+ bathrooms</option>
+      </select>
+    </div>
+
+    <br>
+
+    <div>
+      <label>Minimum Size: <span id="sizeLabel">800 sq ft</span></label><br>
+      <input type="range" id="sizeMin" min="300" max="3000" step="50" value="800" />
+    </div>
+
+    <br>
+
+    <button type="submit">Save Preferences</button>
+  </form>
+
+  <p id="toast" style="display:none;">Preferences saved!</p>
+
+  <script>
+    const budgetMax = document.getElementById('budgetMax');
+    const budgetLabel = document.getElementById('budgetLabel');
+    const sizeSlider = document.getElementById('sizeMin');
+    const sizeLabel = document.getElementById('sizeLabel');
+
+    function fmt(n) { return '$' + Number(n).toLocaleString(); }
+
+    budgetMax.addEventListener('input', () => {
+      budgetLabel.textContent = fmt(budgetMax.value);
+    });
+    sizeSlider.addEventListener('input', () => {
+      sizeLabel.textContent = sizeSlider.value + ' sq ft';
+    });
+
+    document.getElementById('prefForm').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const prefs = {
+        budget: { max: parseInt(budgetMax.value) },
+        bedrooms: parseInt(document.getElementById('bedrooms').value),
+        bathrooms: parseFloat(document.getElementById('bathrooms').value),
+        minSizeSqft: parseInt(sizeSlider.value),
+      };
+      localStorage.setItem('apartmentPrefs', JSON.stringify(prefs));
+      const toast = document.getElementById('toast');
+      toast.style.display = 'block';
+      setTimeout(() => toast.style.display = 'none', 2800);
+    });
+
+    const saved = localStorage.getItem('apartmentPrefs');
+    if (saved) {
+      const p = JSON.parse(saved);
+      if (p.budget?.max) { budgetMax.value = p.budget.max; budgetLabel.textContent = fmt(p.budget.max); }
+      if (p.bedrooms) document.getElementById('bedrooms').value = p.bedrooms;
+      if (p.bathrooms) document.getElementById('bathrooms').value = p.bathrooms;
+      if (p.minSizeSqft) { sizeSlider.value = p.minSizeSqft; sizeLabel.textContent = p.minSizeSqft + ' sq ft'; }
+    }
+  </script>
+
+</body>
+</html>
