@@ -4,6 +4,8 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>NYC Apartment Finder</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 </head>
 <body>
 
@@ -52,6 +54,14 @@
 
     <br>
 
+    <div>
+      <label>Neighborhoods <small>(click to select)</small></label><br>
+      <p id="selectedNeighborhoods">Selected: Midtown, Hell's Kitchen, Chelsea</p>
+      <div id="map" style="height: 520px; width: 600px;"></div>
+    </div>
+
+    <br>
+
     <button type="submit">Save Preferences</button>
   </form>
 
@@ -65,13 +75,68 @@
 
     function fmt(n) { return '$' + Number(n).toLocaleString(); }
 
-    budgetMax.addEventListener('input', () => {
-      budgetLabel.textContent = fmt(budgetMax.value);
-    });
-    sizeSlider.addEventListener('input', () => {
-      sizeLabel.textContent = sizeSlider.value + ' sq ft';
+    budgetMax.addEventListener('input', () => { budgetLabel.textContent = fmt(budgetMax.value); });
+    sizeSlider.addEventListener('input', () => { sizeLabel.textContent = sizeSlider.value + ' sq ft'; });
+
+    // --- Map setup ---
+    const map = L.map('map').setView([40.733, -73.993], 13);
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© OpenStreetMap contributors'
+    }).addTo(map);
+
+    const NEIGHBORHOOD_DEFS = [
+      { name: "Hell's Kitchen",    bounds: [[40.768,-74.010],[40.768,-73.993],[40.748,-73.993],[40.748,-74.010]] },
+      { name: "Midtown",           bounds: [[40.768,-73.993],[40.768,-73.971],[40.748,-73.971],[40.748,-73.993]] },
+      { name: "Chelsea",           bounds: [[40.748,-74.010],[40.748,-73.993],[40.736,-73.993],[40.736,-74.010]] },
+      { name: "Murray Hill",       bounds: [[40.748,-73.993],[40.748,-73.971],[40.742,-73.971],[40.742,-73.993]] },
+      { name: "Gramercy/Flatiron", bounds: [[40.742,-73.993],[40.742,-73.971],[40.736,-73.971],[40.736,-73.993]] },
+      { name: "West Village",      bounds: [[40.736,-74.010],[40.736,-73.999],[40.728,-73.999],[40.728,-74.010]] },
+      { name: "Greenwich Village", bounds: [[40.736,-73.999],[40.736,-73.990],[40.728,-73.990],[40.728,-73.999]] },
+      { name: "East Village",      bounds: [[40.736,-73.990],[40.736,-73.971],[40.723,-73.971],[40.723,-73.990]] },
+      { name: "SoHo",              bounds: [[40.728,-74.005],[40.728,-73.990],[40.718,-73.990],[40.718,-74.005]] },
+      { name: "Tribeca",           bounds: [[40.725,-74.015],[40.725,-74.000],[40.713,-74.000],[40.713,-74.015]] },
+      { name: "Chinatown",         bounds: [[40.718,-74.005],[40.718,-73.990],[40.713,-73.990],[40.713,-74.005]] },
+      { name: "Lower East Side",   bounds: [[40.723,-73.990],[40.723,-73.971],[40.713,-73.971],[40.713,-73.990]] },
+      { name: "Financial District",bounds: [[40.713,-74.015],[40.713,-73.990],[40.700,-73.990],[40.700,-74.015]] },
+      { name: "Battery Park City", bounds: [[40.720,-74.022],[40.720,-74.012],[40.700,-74.012],[40.700,-74.022]] },
+    ];
+
+    const DEFAULT_SELECTED = new Set(["Midtown", "Hell's Kitchen", "Chelsea"]);
+    const selected = new Set(DEFAULT_SELECTED);
+
+    const COLOR_ON  = '#3388ff';
+    const COLOR_OFF = '#aaaaaa';
+
+    const polygons = NEIGHBORHOOD_DEFS.map(({ name, bounds }) => {
+      const poly = L.polygon(bounds, {
+        color: selected.has(name) ? COLOR_ON : COLOR_OFF,
+        fillOpacity: 0.4,
+        weight: 2,
+      }).addTo(map);
+
+      poly.bindTooltip(name, { permanent: true, direction: 'center', className: '' });
+
+      poly.on('click', () => {
+        if (selected.has(name)) {
+          selected.delete(name);
+          poly.setStyle({ color: COLOR_OFF });
+        } else {
+          selected.add(name);
+          poly.setStyle({ color: COLOR_ON });
+        }
+        updateSelectedLabel();
+      });
+
+      return { name, poly };
     });
 
+    function updateSelectedLabel() {
+      const label = selected.size > 0 ? [...selected].join(', ') : 'None';
+      document.getElementById('selectedNeighborhoods').textContent = 'Selected: ' + label;
+    }
+
+    // --- Form submit ---
     document.getElementById('prefForm').addEventListener('submit', (e) => {
       e.preventDefault();
       const prefs = {
@@ -79,13 +144,20 @@
         bedrooms: parseInt(document.getElementById('bedrooms').value),
         bathrooms: parseFloat(document.getElementById('bathrooms').value),
         minSizeSqft: parseInt(sizeSlider.value),
+        neighborhoods: [...selected],
       };
       localStorage.setItem('apartmentPrefs', JSON.stringify(prefs));
+      fetch('/api/preferences', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(prefs),
+      });
       const toast = document.getElementById('toast');
       toast.style.display = 'block';
       setTimeout(() => toast.style.display = 'none', 2800);
     });
 
+    // --- Restore saved prefs ---
     const saved = localStorage.getItem('apartmentPrefs');
     if (saved) {
       const p = JSON.parse(saved);
@@ -93,6 +165,14 @@
       if (p.bedrooms) document.getElementById('bedrooms').value = p.bedrooms;
       if (p.bathrooms) document.getElementById('bathrooms').value = p.bathrooms;
       if (p.minSizeSqft) { sizeSlider.value = p.minSizeSqft; sizeLabel.textContent = p.minSizeSqft + ' sq ft'; }
+      if (p.neighborhoods) {
+        selected.clear();
+        p.neighborhoods.forEach(n => selected.add(n));
+        polygons.forEach(({ name, poly }) => {
+          poly.setStyle({ color: selected.has(name) ? COLOR_ON : COLOR_OFF });
+        });
+        updateSelectedLabel();
+      }
     }
   </script>
 
